@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ERP Almacenes</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<style>
+body{
+  font-family:Segoe UI;
+  background:#f3f4f8;
+  padding:10px;
+  margin:0;
+  box-sizing:border-box;
+}
+.row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-bottom:10px;
+}
+.card{background:white;padding:15px;border-radius:10px}
+
+.btn{
+  background:#5b55ea;
+  color:white;
+  border:none;
+  padding:10px 12px;
+  border-radius:6px;
+  cursor:pointer;
+  min-height:40px;
+}
+
+.btn.red{background:#dc2626}
+.btn.orange{background:#f59e0b}
+
+.input{
+  padding:10px;
+  border:1px solid #ccc;
+  border-radius:6px;
+  max-width:100%;
+  box-sizing:border-box;
+}
+
+.tab{padding:8px;background:#ddd;border:none;border-radius:6px;cursor:pointer}
+.tab.active{background:#5b55ea;color:white}
+table{width:100%;border-collapse:collapse}
+td,th{
+  padding:6px;
+  border-bottom:1px solid #eee;
+  text-align:center;
+  vertical-align:middle;
+}
+tr.selected td{background:#e8e6ff;font-weight:bold}
+.table-container{
+  max-height:420px;
+  overflow:auto;
+  width:100%;
+}
+thead th{
+  position:sticky;
+  top:0;
+  background:#f0f1fa;
+  text-align:center;
+  vertical-align:middle;
+}
+
+.indicador{
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  display:inline-block;
+}
+.verde{background:#16a34a;}
+.amarillo{background:#f59e0b;}
+.rojo{background:#dc2626;}
+/* RESPONSIVE */
+
+*{
+   box-sizing:border-box;
+}
+
+img{
+   max-width:100%;
+   height:auto;
+}
+
+.card{
+   width:100%;
+}
+
+table{
+   min-width:600px;
+}
+
+@media (max-width:768px){
+
+   body{
+      padding:5px;
+   }
+
+   .row{
+      flex-direction:column;
+   }
+
+   .btn{
+      width:100%;
+   }
+
+   .input{
+      width:100%;
+   }
+
+   .tab{
+      flex:1;
+   }
+
+   h2{
+      font-size:20px;
+      text-align:center;
+   }
+
+   #loginModal .card{
+      width:95%;
+      max-width:400px;
+   }
+
+}
+</style>
+<script type="module">
+
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
+import {
+   getFirestore,
+   collection,
+   getDocs,
+   addDoc,
+   updateDoc,
+   doc,
+   onSnapshot
+}
+from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+const firebaseConfig = {
+
+   apiKey: "AIzaSyBACzxu78DXeeP_T7NkPDlHejQOmvtvTC8",
+
+
+   authDomain: "erp-almacenes.firebaseapp.com",
+
+   projectId: "erp-almacenes",
+
+   storageBucket: "erp-almacenes.firebasestorage.app",
+
+   messagingSenderId: "236725604019",
+
+   appId: "1:236725604019:web:978a87388c89ff2295aac6"
+
+};
+
+window.firebaseApp =
+initializeApp(firebaseConfig);
+
+window.db =
+getFirestore(window.firebaseApp);
+
+</script>
+</head>
+
+<body>
+
+<div id="modalProducto" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center; z-index:9999;">
+
+  <div class="card" style="width:300px;">
+    <h3>Nuevo Producto</h3>
+
+    <input id="np_nombre" class="input" placeholder="Nombre">
+    <input id="np_sku" class="input" placeholder="SKU">
+    <input id="np_stock" class="input" type="number" placeholder="Stock">
+    <input id="np_unidad" class="input" placeholder="Unidad">
+    <input id="np_pedido" class="input" placeholder="Pedido">
+
+    <div class="row">
+      <button class="btn" onclick="cerrarNuevoProducto()">Cancelar</button>
+      <button class="btn" onclick="guardarProducto()">Guardar</button>
+    </div>
+
+  </div>
+
+</div>  
+
+<h2 style="color:red"></h2>
+
+<div class="row">
+<button class="tab active" id="tab5010" onclick="cambiarVista('5010')">5010</button>
+<button class="tab" id="tabTA" onclick="cambiarVista('T')">Torre Area</button>
+<button class="tab" id="tabREP" onclick="cambiarVista('REP')">Reporte</button>
+</div>
+
+<div class="row">
+<input type="file" id="excelInput" style="display:none">
+<button class="btn" onclick="excelInput.click()">Importar Excel</button>
+</button>
+
+<button class="btn" onclick="exportarRespaldoExcel()">
+  Respaldar Excel
+</button>
+
+<button class="btn" onclick="abrirNuevoProducto()">
+  + Nuevo Producto
+</button>
+
+</div>
+
+<div class="row">
+   <input id="qty" class="input" placeholder="Cantidad">
+
+   <button class="btn" onclick="hacerEntrada()">
+      Entrada
+   </button>
+
+   <button class="btn red" onclick="abrirModal('salida')">
+      Salida
+   </button>
+
+   <button class="btn orange" onclick="abrirModal('transfer')">
+      Transferir
+   </button>
+</div>
+
+
+<div id="dashboard"></div>
+
+<div class="row">
+<input id="search" class="input" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()">
+</div>
+
+<div id="app"></div>
+
+<div id="modalResp" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;">
+  <div class="card"
+       style="
+          width:max-content;
+          min-width:600px;
+          max-width:90vw;
+       ">
+    <h3>Selecciona Responsable</h3>
+
+    <select
+      id="selectResp"
+      class="input"
+      style="
+         width:500px;
+         min-width:500px;
+      ">
+    </select>
+
+    <div class="row">
+      <button class="btn" onclick="cerrarResp()">Cancelar</button>
+      <button class="btn" onclick="confirmarResp()">Confirmar</button>
+    </div>
+  </div>
+</div>
+<div id="modalQR"
+     style="display:none;position:fixed;inset:0;
+     background:rgba(0,0,0,.5);
+     align-items:center;
+     justify-content:center;
+     z-index:9999;">
+
+  <div class="card">
+    <h3>Validar Responsable</h3>
+
+    <p id="responsableEsperado"></p>
+
+    <div id="reader" style="width:300px"></div>
+
+    <div class="row">
+      <button class="btn red" onclick="cerrarQR()">
+        Cancelar
+      </button>
+    </div>
+  </div>
+
+</div>
+<div id="loginModal"
+     style="
+        position:fixed;
+        inset:0;
+        background:#f3f4f8;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        z-index:99999;
+     ">
+
+   <div class="card"
+        style="
+           width:420px;
+           text-align:center;
+           padding:30px;
+        ">
+
+      <img
+         src="logo-salinas.png"
+         style="
+            width:250px;
+            margin-bottom:15px;
+         "
+      >
+
+      <h2 style="
+         margin-bottom:25px;
+         color:#333;
+      ">
+         ALMACENES GRUPO SALINAS
+      </h2>
+
+      <input
+         id="loginUser"
+         class="input"
+         placeholder="Usuario"
+         style="width:100%;margin-bottom:10px;">
+
+      <input
+         id="loginPass"
+         class="input"
+         type="password"
+         placeholder="Contraseña"
+         style="width:100%;margin-bottom:20px;">
+
+      <button
+         class="btn"
+         style="width:100%;"
+         onclick="iniciarSesion()">
+         Iniciar Sesión
+      </button>
+
+   </div>
+
+</div>
+
+<script>
+  
+let products = [];
+let history = [];
+let warehouse="P5010";
+
+let selected=null;
+let accionPendiente=null;
+let filtroTexto="";
+let responsablePendiente=null;
+let html5QrCode=null;
+const usuarios = {
+   admin: {
+      password: "Admin2026",
+      almacenes: ["P5010","TA"]
+   },
+   almacen5010: {
+      password: "5010ERP",
+      almacenes: ["P5010"]
+   },
+   torrearea: {
+      password: "TAERP",
+      almacenes: ["TA"]
+   }
+};
+
+let usuarioActual = null;
+
+async function guardarMovimientoFirestore(datos){
+
+   const {
+      addDoc,
+      collection
+   } = await import(
+      "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js"
+   );
+
+   await addDoc(
+      collection(
+         window.db,
+         "movimientos"
+      ),
+      datos
+   );
+
+}
+
+async function cargarMovimientosFirestore(){
+
+   const {
+      collection,
+      onSnapshot
+   } = await import(
+      "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js"
+   );
+
+   onSnapshot(
+
+      collection(
+         window.db,
+         "movimientos"
+      ),
+
+      (snap)=>{
+
+         history = [];
+
+         snap.forEach(docu=>{
+
+            history.push({
+               firebaseId: docu.id,
+               ...docu.data()
+            });
+
+         });
+
+         console.log(
+            "MOVIMIENTOS ACTUALIZADOS:",
+            history.length
+         );
+
+      }
+
+   );
+
+}
+
+async function cargarProductosFirestore(){
+
+   const {
+      collection,
+      onSnapshot
+   } = await import(
+      "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js"
+   );
+
+   onSnapshot(
+
+      collection(
+         window.db,
+         "products"
+      ),
+
+      (snap)=>{
+
+         products = [];
+
+         snap.forEach(docu=>{
+
+            products.push({
+               firebaseId: docu.id,
+               ...docu.data()
+            });
+
+         });
+
+         console.log(
+            "PRODUCTOS ACTUALIZADOS:",
+            products.length
+         );
+
+         render();
+
+      }
+
+   );
+
+}
+const responsables = {
+   P5010: [
+      "Alexis Chávez Moreno",
+      "Adolfo Ángel López Cruz",
+      "Armando Negrete Valencia",
+      "Erika Vega Hernández",
+      "Federico Ruíz Hernández",
+      "Francisco Jerónimo Vázquez García",
+      "Francisco Solís Aguirre",
+      "Isaac Jacobo Barrales",
+      "Javier Vázquez López",
+      "Julio Soria Zea",
+      "Lizbeth Dariana Victoria Pérez",
+      "Luis Alberto Muñóz Reyes",
+      "Osvaldo Alberto Maldonado Álvarez",
+      "Rosa María Hernández",
+      "Vianey Martínez Marcelino",
+      "Mario Alberto Arias Atayde",
+      "Luis Alberto Muñoz Reyes",
+   ],
+
+   TA: [
+      "Christian Alexis Salinas Hernandez",
+      "Erika Margarita Romero Cabrera",
+      "Genaro Reyes Gonzalez",
+      "Luis Ricardo Vázquez Lopez",
+      "Martin Escobedo Reyes"
+   ]
+};
+
+function filtrarProductos(){
+  filtroTexto = document.getElementById("search").value.toLowerCase();
+  render();
+}
+function cambiarVista(v){
+
+  tab5010.classList.remove("active");
+  tabTA.classList.remove("active");
+  tabREP.classList.remove("active");
+
+  if(v==="5010"){
+     tab5010.classList.add("active");
+     warehouse = "P5010";
+     render();
+  }
+
+  if(v==="T"){
+     tabTA.classList.add("active");
+     warehouse = "TA";
+     render();
+  }
+
+  if(v==="REP"){
+     tabREP.classList.add("active");
+     verReporte();
+  }
+
+}
+
+function dashboardRender(){
+ let total=products.filter(p=>p.ubicacion===warehouse)
+ .reduce((a,b)=>a+b.stock,0);
+
+ dashboard.innerHTML=`<div class="card">Stock total: ${total}</div>`;
+}
+function getColor(stock){
+ if(stock === 0) return "rojo";
+ if(stock <=5) return "amarillo";
+ return "verde";
+}
+function render(){
+
+  dashboardRender();
+
+  let list = products.filter(p =>
+    p.ubicacion === warehouse &&
+    (
+      (p.nombre || "").toLowerCase().includes(filtroTexto) ||
+      (p.sku || "").toLowerCase().includes(filtroTexto)
+    )
+  );
+
+  app.innerHTML = `
+<div class="card">
+
+<button class="btn" onclick="exportarInventarioPDF()">
+📄 Exportar Inventario PDF
+</button>
+
+<div class="table-container">
+<table>
+ <thead>
+ <tr>
+ <th></th>
+ <th>Nombre</th>
+ <th>SKU</th>
+ <th>Stock</th>
+ <th>Unidad</th>
+ </tr>
+ </thead>
+ <tbody>
+ ${list.map(p => `
+<tr onclick="sel('${p.id}')" class="${selected===p.id?'selected':''}">
+   <td><span class="indicador ${getColor(p.stock)}"></span></td>
+   <td>${p.nombre}</td>
+   <td>${p.sku}</td>
+   <td>${p.stock}</td>
+   <td>${p.unidad}</td>
+</tr>
+`).join("")}
+ </tbody>
+ </table>
+ </div>
+ </div>`;
+// localStorage.setItem(
+//    "products",
+//    JSON.stringify(products)
+// );
+}
+function sel(s){
+ selected = s;
+ document.querySelectorAll("tbody tr").forEach(tr=>{
+   tr.classList.remove("selected");
+ });
+ if(event && event.currentTarget){
+   event.currentTarget.classList.add("selected");
+ }
+}
+
+/* IMPORTAR */
+excelInput.onchange = e => {
+
+  let r = new FileReader();
+
+  r.onload = ev => {
+
+    let wb = XLSX.read(
+      new Uint8Array(ev.target.result),
+      { type: "array" }
+    );
+
+    let rows = XLSX.utils.sheet_to_json(
+      wb.Sheets[wb.SheetNames[0]]
+    );
+
+    console.log(rows[0]);
+    console.log("Registros:", rows.length);
+
+    rows.forEach(x => {
+
+      if (!x.NOMBRE || !x.SKU) return;
+
+      products.push({
+        id: crypto.randomUUID(),
+        nombre: x.NOMBRE,
+        sku: x.SKU,
+        stock: Number(x.STOCK) || 0,
+        ubicacion: String(x["UBICACIÓN"] || "").trim(),
+        unidad: x.UNIDAD || "PZA"
+      });
+
+    });
+
+    // localStorage.setItem(
+//    "products",
+//    JSON.stringify(products)
+// );
+
+    render();
+
+  }; // 
+
+  r.readAsArrayBuffer(
+    e.target.files[0]
+  );
+
+}; // 
+
+function ajustarAnchoResponsables(){
+
+   let lista = responsables[warehouse] || [];
+
+   let max = Math.max(
+      ...lista.map(x => x.length)
+   );
+
+   selectResp.style.width = (max + 5) + "ch";
+
+}
+
+function abrirModal(tipo){
+
+   if(!selected)
+      return alert("Selecciona producto");
+
+   accionPendiente = tipo;
+
+   let lista = responsables[warehouse] || [];
+
+   selectResp.innerHTML = lista
+      .map(r => `<option>${r}</option>`)
+      .join("");
+
+   let nombreMasLargo = Math.max(
+      ...lista.map(x => x.length)
+   );
+
+   selectResp.style.width =
+      (nombreMasLargo + 10) + "ch";
+
+   modalResp.style.display = "flex";
+}
+function cerrarResp(){
+ modalResp.style.display="none";
+}
+
+function confirmarResp(){
+
+   let q = +qty.value || 1;
+
+   if(q<=0)
+      return alert("Cantidad inválida");
+
+   responsablePendiente = selectResp.value;
+
+   cerrarResp();
+
+   if(accionPendiente === "transfer"){
+
+      ejecutarMovimiento(responsablePendiente);
+      return;
+
+   }
+
+   document.getElementById("responsableEsperado").innerHTML =
+      "Escanee el QR de:<br><b>" +
+      responsablePendiente +
+      "</b>";
+
+   modalQR.style.display="flex";
+
+   html5QrCode = new Html5Qrcode("reader");
+
+   html5QrCode.start(
+      { facingMode:"environment" },
+      { fps:10, qrbox:250 },
+      onScanSuccess
+   );
+}
+
+
+function cerrarQR(){
+
+   modalQR.style.display="none";
+
+   if(html5QrCode){
+      html5QrCode.stop().catch(()=>{});
+   }
+}
+
+function onScanSuccess(decodedText){
+
+   if(decodedText.trim() !== responsablePendiente.trim()){
+
+      alert(
+         "QR Incorrecto\n\n" +
+         "Esperado: " + responsablePendiente +
+         "\nLeído: " + decodedText
+      );
+
+      return;
+   }
+
+   html5QrCode.stop();
+
+   modalQR.style.display="none";
+
+   ejecutarMovimiento(responsablePendiente);
+}
+
+async function ejecutarMovimiento(r){
+
+   let q = +qty.value || 1;
+
+   const {
+      doc,
+      updateDoc,
+      addDoc,
+      collection
+   } = await import(
+      "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js"
+   );
+
+   if(accionPendiente === "salida"){
+
+      let p = products.find(
+         x => x.id === selected
+      );
+
+      if(!p)
+         return alert("Producto no encontrado");
+
+      if(q > p.stock)
+         return alert("Stock insuficiente");
+
+      await updateDoc(
+         doc(
+            window.db,
+            "products",
+            p.firebaseId
+         ),
+         {
+            stock: p.stock - q
+         }
+      );
+
+      let movimiento = {
+   date: new Date().toISOString(),
+   almacen: warehouse,
+   type: "Salida",
+   sku: p.sku,
+   nombre: p.nombre,
+   qty: q,
+   responsable: r
+};
+
+history.push(movimiento);
+
+await guardarMovimientoFirestore(
+   movimiento
+);
+
+      await cargarProductosFirestore();
+
+      alert("Salida registrada en Firestore");
+
+      return;
+   }
+
+   if(accionPendiente === "transfer"){
+
+      let destino =
+         warehouse === "P5010"
+         ? "TA"
+         : "P5010";
+
+      let origen = products.find(
+         x => x.id === selected
+      );
+
+      if(!origen)
+         return alert("Producto no encontrado");
+
+      if(q > origen.stock)
+         return alert("Stock insuficiente");
+
+      let productoDestino = products.find(
+         x =>
+            x.idOrigen === origen.id &&
+            x.ubicacion === destino
+      );
+
+      await updateDoc(
+         doc(
+            window.db,
+            "products",
+            origen.firebaseId
+         ),
+         {
+            stock: origen.stock - q
+         }
+      );
+
+      if(productoDestino){
+
+         await updateDoc(
+            doc(
+               window.db,
+               "products",
+               productoDestino.firebaseId
+            ),
+            {
+               stock: productoDestino.stock + q
+            }
+         );
+
+      }else{
+
+         await addDoc(
+            collection(
+               window.db,
+               "products"
+            ),
+            {
+               id: crypto.randomUUID(),
+               idOrigen: origen.id,
+               nombre: origen.nombre,
+               sku: "TRANSF-" + origen.sku,
+               stock: q,
+               unidad: origen.unidad,
+               pedido: origen.pedido || "",
+               ubicacion: destino
+            }
+         );
+
+      }
+
+      let movimiento = {
+   date: new Date().toISOString(),
+   almacen: warehouse,
+   destino: destino,
+   type: "Transferencia",
+   sku: origen.sku,
+   nombre: origen.nombre,
+   qty: q,
+   responsable: r
+};
+
+history.push(movimiento);
+
+await guardarMovimientoFirestore(
+   movimiento
+);
+
+      await cargarProductosFirestore();
+
+      alert("Transferencia registrada en Firestore");
+
+   }
+
+}
+async function hacerEntrada(){
+
+  if(!selected)
+    return alert("Selecciona un producto");
+
+  let q = +qty.value || 0;
+
+  if(q <= 0)
+    return alert("Cantidad inválida");
+
+  let p = products.find(
+    x =>
+      x.id === selected &&
+      x.ubicacion === warehouse
+  );
+
+  if(!p)
+    return alert("Producto no encontrado");
+
+  let pedido = prompt("Número de pedido:") || "";
+
+  const {
+     doc,
+     updateDoc
+  } = await import(
+     "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js"
+  );
+
+  await updateDoc(
+     doc(
+        window.db,
+        "products",
+        p.firebaseId
+     ),
+     {
+        stock: p.stock + q
+     }
+  );
+
+  let movimiento = {
+   date: new Date().toISOString(),
+   almacen: warehouse,
+   type: "Entrada",
+   sku: p.sku,
+   nombre: p.nombre,
+   qty: q,
+   pedido: pedido,
+   responsable: "Sistema"
+};
+
+history.push(movimiento);
+
+await guardarMovimientoFirestore(
+   movimiento
+);
+
+  qty.value = "";
+
+  await cargarProductosFirestore();
+
+  alert("Entrada registrada en Firestore");
+
+}
+
+/* ✅ REPORTE CON PDF */
+function verReporte(){
+
+  dashboard.innerHTML = "";
+
+  app.innerHTML = `
+  <div class="card">
+    <h3>Reporte</h3>
+    <button class="btn" onclick="exportPDF()">Exportar PDF</button>
+    <div id="tablaReporte"></div>
+  </div>
+  `;
+  document.getElementById("tablaReporte").innerHTML = `
+  <table>
+    <tr>
+      <th>Fecha</th>
+      <th>Almacén</th>
+      <th>Tipo</th>
+      <th>SKU</th>
+      <th>Nombre</th>
+      <th>Cant</th>
+      <th>Pedido</th>
+      <th>Resp</th>
+    </tr>
+
+    ${history
+      .filter(x => x.almacen === warehouse)
+      .sort((a,b)=>new Date(b.date)-new Date(a.date))
+      .map(x=>`
+        <tr>
+          <td>${new Date(x.date).toLocaleString()}</td>
+          <td>${x.almacen === "TA" ? "TORRE AREA" : "5010"}</td>
+          <td>${x.type}</td>
+          <td>${x.sku}</td>
+          <td>${x.nombre || "-"}</td>
+          <td>${x.qty}</td>
+          <td>${x.pedido || "-"}</td>
+          <td>${x.responsable}</td>
+        </tr>
+      `).join("")}
+  </table>
+  `;
+}
+function exportarRespaldoExcel(){
+  let wb = XLSX.utils.book_new();
+  let wsProductos = XLSX.utils.json_to_sheet(products);
+  let wsMovimientos = XLSX.utils.json_to_sheet(history);
+  XLSX.utils.book_append_sheet(
+    wb,
+    wsProductos,
+    "Productos"
+  );
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    wsMovimientos,
+    "Movimientos"
+  );
+
+  let fecha = new Date()
+    .toISOString()
+    .slice(0,19)
+    .replace(/:/g,"-");
+
+  XLSX.writeFile(
+    wb,
+    "Respaldo_ERP_" + fecha + ".xlsx"
+  );
+}
+/* ✅ EXPORTAR PDF */
+function exportPDF(){
+
+  const { jsPDF } = window.jspdf;
+
+  let doc = new jsPDF();
+
+  let titulo = warehouse === "P5010"
+  ? "REPORTE ALMACEN 5010"
+  : "REPORTE ALMACEN TORRE AREA";
+
+  doc.setFontSize(16);
+  doc.text(titulo, 14, 15);
+
+  let rows = [...document.querySelectorAll("#tablaReporte tr")]
+    .map(tr => [...tr.children].map(td => td.innerText));
+
+  doc.autoTable({
+    body: rows,
+    startY: 25
+  });
+
+  doc.save(
+    warehouse === "P5010"
+      ? "Reporte_5010.pdf"
+      : "Reporte_Torre_Area.pdf"
+  );
+}
+function abrirNuevoProducto(){
+  modalProducto.style.display = "flex";
+}
+function cerrarNuevoProducto(){
+  modalProducto.style.display = "none";
+}
+
+async function guardarProducto(){
+
+  let nombre = document.getElementById("np_nombre").value;
+  let sku = document.getElementById("np_sku").value;
+  let stock = +document.getElementById("np_stock").value || 0;
+  let unidad = document.getElementById("np_unidad").value || "Pza";
+  let pedido = document.getElementById("np_pedido").value || "";
+
+  if(!nombre || !sku){
+    return alert("Nombre y SKU obligatorios");
+  }
+
+  const {
+     addDoc,
+     collection
+  } = await import(
+     "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js"
+  );
+
+  await addDoc(
+     collection(window.db,"products"),
+     {
+        id: crypto.randomUUID(),
+        nombre: nombre,
+        sku: sku,
+        stock: stock,
+        unidad: unidad,
+        pedido: pedido,
+        ubicacion: warehouse
+     }
+  );
+
+  await cargarProductosFirestore();
+
+  cerrarNuevoProducto();
+
+  alert("Producto guardado en Firestore");
+
+}
+
+/* ===== PDF INVENTARIO ===== */
+
+function exportarInventarioPDF(){
+
+  const { jsPDF } = window.jspdf;
+  let doc = new jsPDF();
+
+  let titulo =
+    warehouse === "P5010"
+      ? "INVENTARIO ALMACEN 5010"
+      : "INVENTARIO TORRE AREA";
+
+  doc.setFontSize(16);
+  doc.text(titulo, 14, 15);
+
+  let inventario = products.filter(
+    p => p.ubicacion === warehouse
+  );
+
+  let rows = inventario.map(p => [
+    p.nombre,
+    p.sku,
+    p.stock,
+    p.unidad
+  ]);
+
+  doc.autoTable({
+    head:[["Nombre","SKU","Stock","Unidad"]],
+    body:rows,
+    startY:25
+  });
+
+  doc.save(
+    warehouse === "P5010"
+      ? "Inventario_5010.pdf"
+      : "Inventario_Torre_Area.pdf"
+  );
+}
+function iniciarSesion(){
+
+   let u =
+      document.getElementById("loginUser")
+      .value
+      .trim();
+
+   let p =
+      document.getElementById("loginPass")
+      .value;
+
+   if(
+      !usuarios[u] ||
+      usuarios[u].password !== p
+   ){
+      alert("Usuario o contraseña incorrectos");
+      return;
+   }
+
+   usuarioActual = u;
+
+   if(
+      usuarios[u].almacenes.length === 1
+   ){
+
+      warehouse =
+         usuarios[u].almacenes[0];
+
+      if(warehouse === "P5010"){
+         cambiarVista("5010");
+      }else{
+         cambiarVista("T");
+      }
+
+   }
+
+   if(
+      !usuarios[u].almacenes.includes("P5010")
+   ){
+      document.getElementById("tab5010").style.display="none";
+   }
+
+   if(
+      !usuarios[u].almacenes.includes("TA")
+   ){
+      document.getElementById("tabTA").style.display="none";
+   }
+
+   document.getElementById("loginModal").style.display="none";
+}
+cargarMovimientosFirestore();
+cargarProductosFirestore();
+</script>
+
+</body>
+</html>
